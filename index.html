@@ -13,8 +13,7 @@
 <link rel="stylesheet" href="css/nouislider.min.css">
         <link rel="stylesheet" href="css/leaflet-control-geocoder.Geocoder.css">
         <link rel="stylesheet" href="css/leaflet-measure.css">
-		<link rel="stylesheet" href="https://unpkg.comleaflet@1.9.2/dist/leaflet.css"/>
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/0.4.2/leaflet.draw.css"/>
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
         <style>
         html, body, #map {
             width: 100%;
@@ -22,12 +21,27 @@
             padding: 0;
             margin: 0;
         }
+		#labelToggleButton {
+            position: absolute;
+            top: 64%;
+            left: 1%;
+            z-index: 1000;
+            background-color: #fff;
+            border: 4px solid #ccc;
+            padding: 5px;
+			 width: 35px; 
+            cursor: pointer;
+            font-size: 17px;
+			color: #FF0000;
+            font-weight: bold;
+        }
         </style>
         <title></title>
     </head>
     <body>
         <div id="map">
         </div>
+		<button id="labelToggleButton" onclick="toggleLabelLayer()">N</button>
         <script src="js/qgis2web_expressions.js"></script>
         <script src="js/leaflet.js"></script><script src="js/L.Control.Locate.min.js"></script>
         <script src="js/leaflet.rotatedMarker.js"></script>
@@ -62,8 +76,7 @@
         <script src="data/PublicWell_17.js"></script>
         <script src="data/Dip_18.js"></script>
         <script src="data/Node_19.js"></script>
-		<script src="https://unpkg.com/leaflet@1.9.2./dist/leaflet.js"></script>
-		<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/0.4.2/leaflet.draw.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
         <script>
         var highlightLayer;
         function highlightFeature(e) {
@@ -84,6 +97,58 @@
             zoomControl:true, maxZoom:28, minZoom:1
         }).fitBounds([[9.412773764927888,76.52979757217207],[9.477571563732596,76.63514219586133]]);
         var hash = new L.Hash(map);
+		
+		// Create a new layer group for labels
+		
+		var labelsLayer = new L.layerGroup();
+		var labelsVisible = false; // Track the visibility state of labels
+		 // Function to create labels for each Node and add them to the labelsLayer
+        function addLabelsForNodes() {
+            json_Node_19.features.forEach(function (feature) {
+                var latlng, NodeName;
+
+                // Adjust the following lines based on your GeoJSON structure
+                if (feature.geometry.type === 'Point') {
+                    // If the geometry type is Point, use the coordinates directly
+                    latlng = L.latLng(feature.geometry.coordinates[1], feature.geometry.coordinates[0]);
+                } else if (feature.geometry.type === 'LineString' && feature.geometry.coordinates.length > 1) {
+                    // If the geometry type is LineString, use the midpoint of the line
+                    var midPointIndex = Math.floor(feature.geometry.coordinates.length / 2);
+                    latlng = L.latLng(feature.geometry.coordinates[midPointIndex][1], feature.geometry.coordinates[midPointIndex][0]);
+                } else {
+                    // Handle other geometry types as needed
+                    return;
+                }
+
+                // Adjust the following line based on the property containing the Node
+                NodeName = feature.properties['Node'];
+
+                // Create a divIcon with the Node Name as the content
+                var labelIcon = L.divIcon({
+                    className: '',
+                    html: NodeName,
+					iconAnchor: [50, 0],
+                });
+
+                // Create a marker with the labelIcon and add it to the labelsLayer
+                var labelMarker = L.marker(latlng, { icon: labelIcon });
+                labelsLayer.addLayer(labelMarker);
+            });
+        }
+
+        // Call the function to add labels for Nodes
+        
+		 // Function to toggle the visibility of the labels layer
+            function toggleLabelLayer() {
+                if (labelsVisible) {
+                    map.removeLayer(labelsLayer);
+                } else {
+                    map.addLayer(labelsLayer);
+                }
+                labelsVisible = !labelsVisible; // Toggle the visibility state
+            }
+			addLabelsForNodes();
+		
         map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
         var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
         function removeEmptyRowsFromPopupContent(content, feature) {
@@ -2854,23 +2919,41 @@ binocularsIcon.parentNode.appendChild(textBox);
                 filterFunc();
             };
             div_road_name.appendChild(reset_road_name);
-			var drawControl = new L.Control.Draw();
-			map.addControl(drawControl);
-			
-			var drawnFeatures = new L.FeatureGroup();
-			map.addLayer(drawnFeatures);
-			
-			map.on("draw:created",function(e){
-				var type = e.layerType;
-				var layer = e.layer;
-				drawnFeatures.addLayer(layer);
-				});
-				
-				map.on("draw:created",function(e){
-				var type = e.layerType;
-				var layer = e.layer;
-				drawnFeatures.addLayer(layer);
-				});
+			var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        var drawControl = new L.Control.Draw({
+            draw: {
+                polygon: true,
+                polyline: true,
+                rectangle: true,
+                circle: true,
+                marker: true,
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: true,
+            },
+        });
+        map.addControl(drawControl);
+// Set custom CSS to position the control on the right side
+drawControl.setPosition('topright');
+        // Event handling for drawn items
+        map.on('draw:created', function (e) {
+            var layer = e.layer;
+
+            // Add the newly drawn layer to drawnItems
+            drawnItems.addLayer(layer);
+
+            // Handle the new feature (e.g., display information or perform actions)
+        });
+
+        map.on('draw:deleted', function (e) {
+            var layers = e.layers;
+            layers.eachLayer(function (layer) {
+                drawnItems.removeLayer(layer);
+            });
+        });
 				var printControl = L.Control.extend({
       options: {
         position: 'topright'
